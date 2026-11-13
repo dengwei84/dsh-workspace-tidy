@@ -1,0 +1,4 @@
+- insert:
+    - id: workspace-tidy
+      name: dsh-workspace-tidy
+      config: {}

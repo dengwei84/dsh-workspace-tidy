@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Workspace Tidy",
+    "description": "Moves generated scripts and temporary leftovers into a single hidden .dsh directory, keeping the workspace root clean."
+  }
+}
