@@ -1,10 +1,11 @@
 # 放到 awesome-dsh-plugin 仓库的 data/plugins/dengwei84__dsh-workspace-tidy.yml
+# 描述里若含「: 」（冒号加空格）必须用引号包住，否则 YAML 解析失败
 url: https://github.com/dengwei84/dsh-workspace-tidy
 name: dengwei84/dsh-workspace-tidy
 category: tools
 description:
-  en: Keeps the workspace tidy by moving stray temp files, render output and generated scripts into a hidden .dsh folder.
-  zh: 工作区自动整理插件：把根目录的临时文件、渲染产物和脚本收进 .dsh 目录，让工作区保持整洁。
+  en: 'Workspace tidy-up plugin: moves stray temp files, render leftovers and generated scripts into a hidden .dsh folder at the end of each turn, keeping the workspace root clean without blocking or deleting anything.'
+  zh: '工作区自动整理插件：每轮结束时把根目录的临时文件、渲染产物和生成脚本收进隐藏的 .dsh 目录，不拦截、不删除，让工作区保持整洁。'
 
 # 可选：GitHub 托管的位图（png/jpg/jpeg/webp），不写则用作者头像
 # icon: https://raw.githubusercontent.com/dengwei84/dsh-workspace-tidy/main/assets/icon-180.png
