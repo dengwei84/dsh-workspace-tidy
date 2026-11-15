@@ -5,6 +5,22 @@
 **没有「上传安装包」的入口**——收录 = 向该仓库提一个 PR，合并后自动出现在市场的「发现/搜索」里。
 市场界面右上角的「申请收录插件 ↗」就是这份 contributing.md。
 
+## 状态：已上架（2026-11-15）
+
+| 项 | 值 |
+|---|---|
+| PR | [#14979](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/14979) — 已合并，2026-11-14 17:16 UTC（北京时间 2026-11-15 01:16） |
+| 收录门槛 | 通过（提交时仓库不满 1 天，CI 自动重跑，2026-11-14 12:58 UTC 转绿） |
+| 目录条目 | `data/plugins/dengwei84__dsh-workspace-tidy.yml`，category `tools`，added 2026-11-14 |
+| 公开目录 | `https://awesome-dsh-plugin.com/plugins.json` 已含 `dsh-workspace-tidy` |
+| 详情页 | <https://awesome-dsh-plugin.com/p/dengwei84/dsh-workspace-tidy/>（中文页在 `/zh/` 下） |
+
+后续维护：
+
+- **发新版**：仓库推新提交即可；目录条目不写版本号，安装走默认分支最新提交。要固定版本用 `github:dengwei84/dsh-workspace-tidy#<sha>`。
+- **改展示信息**（描述/分类/图标）：再向 awesome-dsh-plugin 提一次 PR 修改对应 YAML，合并后生效。
+- **本机更新**：`pnpm dsh plugin --profile desktop add github:dengwei84/dsh-workspace-tidy`。
+
 ## 一、先决条件（缺一不可）
 
 | 条件 | 说明 |

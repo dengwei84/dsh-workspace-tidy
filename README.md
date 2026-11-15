@@ -41,7 +41,8 @@
 pnpm dsh plugin --profile <profile> add github:dengwei84/dsh-workspace-tidy
 ```
 
-也可以装好后在插件市场里搜索「工作区自动整理」。
+也可以在 dshmarket 里搜索「工作区自动整理」——本插件已收录（2026-11-14），
+详情页 <https://awesome-dsh-plugin.com/p/dengwei84/dsh-workspace-tidy/>。
 
 本地开发时用目录安装（链接形式，改完 `index.js` 在插件管理里关再开一次即可生效）：
 
