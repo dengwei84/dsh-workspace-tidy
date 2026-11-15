@@ -14,12 +14,19 @@
 | 目录条目 | `data/plugins/dengwei84__dsh-workspace-tidy.yml`，category `tools`，added 2026-11-14 |
 | 公开目录 | `https://awesome-dsh-plugin.com/plugins.json` 已含 `dsh-workspace-tidy` |
 | 详情页 | <https://awesome-dsh-plugin.com/p/dengwei84/dsh-workspace-tidy/>（中文页在 `/zh/` 下） |
+| npm | `dsh-workspace-tidy@0.1.1` 已发布（2026-11-15），<https://www.npmjs.com/package/dsh-workspace-tidy> |
 
 后续维护：
 
 - **发新版**：仓库推新提交即可；目录条目不写版本号，安装走默认分支最新提交。要固定版本用 `github:dengwei84/dsh-workspace-tidy#<sha>`。
-- **改展示信息**（描述/分类/图标）：再向 awesome-dsh-plugin 提一次 PR 修改对应 YAML，合并后生效。
-- **本机更新**：`pnpm dsh plugin --profile desktop add github:dengwei84/dsh-workspace-tidy`。
+- **发 npm 新版**：`npm publish`（版本号需先 bump）；发布后安装可用 `pnpm dsh plugin --profile <profile> add dsh-workspace-tidy`。
+- **改展示信息**（描述/分类/图标）：再向 awesome-dsh-plugin 提一次 PR 修改对应 YAML，合并后生效；若要市场优先用 npm，可在 YAML 里补 `npm: dsh-workspace-tidy`。
+- **本机更新**：`pnpm dsh plugin --profile desktop add dsh-workspace-tidy`（npm 版）或 `github:dengwei84/dsh-workspace-tidy`（跟随 main）。
+
+### npm 首次发布的两个坑
+
+- **0.0.0-stage 占位**：新包第一次 `npm publish` 后，registry 先出现 `0.0.0-stage`（"Temporary package placeholder for staged publishing"），真实版本要等平台处理完才出现。本次实测约 20 分钟，属于正常中间态，不是发错包；用 `npm view <name> versions --prefer-online` 观察。
+- **2FA**：账号开了 2FA 时，`npm publish` 只接受「6 位验证码」或「勾选 Bypass 2FA 的 granular token」。普通 granular token 会报 `E403 ... granular access token with bypass 2fa enabled is required`。npm 计划 2027 年起停用 bypass 2FA 的直接发布，长期方案是 trusted publishing（OIDC）。
 
 ## 一、先决条件（缺一不可）
 
@@ -132,5 +139,6 @@ en：**Keeps the workspace tidy by moving stray temp files, render output and ge
 ## 五、安装（对使用者）
 
 - 市场里搜到后点安装即可；安装目标由目录 URL 解析。
-- 手工装同一份代码：`pnpm dsh plugin --profile <profile> add github:dengwei84/dsh-workspace-tidy`
+- 从 npm 装（推荐）：`pnpm dsh plugin --profile <profile> add dsh-workspace-tidy`
+- 从 GitHub 装同一份代码：`pnpm dsh plugin --profile <profile> add github:dengwei84/dsh-workspace-tidy`
 - 本地目录安装（开发用）：`plugin_manager` 的 `install_bundle`，target 为包目录绝对路径。

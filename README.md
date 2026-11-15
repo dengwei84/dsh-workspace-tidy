@@ -38,7 +38,13 @@
 
 ## 安装
 
-从 GitHub 安装：
+从 npm 安装（推荐，预构建、无需 git 构建授权）：
+
+```powershell
+pnpm dsh plugin --profile <profile> add dsh-workspace-tidy
+```
+
+或从 GitHub 安装（跟随 main 最新提交）：
 
 ```powershell
 pnpm dsh plugin --profile <profile> add github:dengwei84/dsh-workspace-tidy
@@ -46,6 +52,7 @@ pnpm dsh plugin --profile <profile> add github:dengwei84/dsh-workspace-tidy
 
 也可以在 dshmarket 里搜索「工作区自动整理」——本插件已收录（2026-11-14），
 详情页 <https://awesome-dsh-plugin.com/p/dengwei84/dsh-workspace-tidy/>。
+npm 页面：<https://www.npmjs.com/package/dsh-workspace-tidy>。
 
 本地开发时用目录安装（链接形式，改完 `index.js` 在插件管理里关再开一次即可生效）：
 
