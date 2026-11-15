@@ -10,7 +10,7 @@
 | 时机 | 触发事件 | 收什么 |
 |---|---|---|
 | 每轮回复结束 | `agent/turn-stopping` | 临时残留：`*.tmp`、`*.log`、`*.bak`、`*.orig`、`~$*`、`.dsh-*`、`.dsh-office-*` |
-| 会话结束 | `session/disposed` | 上面全部 + 生成的脚本（`*.py`、`*.ps1`、`*.sh`、`*.bat`、`*.cmd`） |
+| 会话结束 | `session/disposed` | 上面全部 + 生成的脚本（`*.py`、`*.ps1`、`*.sh`、`*.bat`、`*.cmd`），脚本需静置 30 秒 |
 | 会话创建 / 插件启动 / 每 10 分钟 | `session/created`、apply、interval | 上面全部；脚本只收 12 小时前的旧文件 |
 | 任意时机 | 目录 | `__pycache__\`、`.pytest_cache\` 整目录移入 `.dsh\tmp\cache\` |
 
@@ -30,6 +30,9 @@
 - 只处理 120 秒内没有写入的文件，正在写的文件不会被搬走。
 - 根目录的目录不会被碰（`.dsh-office-*`、`__pycache__` 除外）。
 - 符号链接跳过；`AGENTS.md`、`README.md`、`清理DSH临时文件.ps1`、`修复-DSH插件更新.ps1` 永不移动。
+- 工作区是 git 仓库时，被 git 跟踪的文件（`git ls-files`）永不移动——生成脚本常被提交，误搬会破坏仓库状态。
+- 单条移动失败（文件被占用、权限不足）只记录到日志的 `failed`，同轮其它条目继续处理。
+- 跨盘移动（`EXDEV`）自动退化为复制后删除。
 - 目标重名自动加 `-2`、`-3`，不覆盖已有文件。
 - 默认 `dryRun: false`；改成 `true` 只记日志不落盘。
 
@@ -60,13 +63,12 @@ pnpm dsh plugin --profile <profile> remove dsh-workspace-tidy
 ## 验证
 
 ```powershell
-node "D:\AI\DeepSeek\_过程\04-脚本工具\dsh-workspace-tidy\test\verify.mjs"
+node --test "D:\AI\DeepSeek\_过程\04-脚本工具\dsh-workspace-tidy\test\"
 ```
 
-脚本在临时目录里造 `a.tmp`、`b.py`、`.dsh-office-t\` 和一个受保护脚本，手动触发
-`turn-stopping` 与 `session/disposed`，检查三条事件各自收什么、日志是否 UTF-8、
-路径是否绝对。预期输出 `turn kept .py: yes`、`disposed .py moved: yes`、
-`keep file kept: yes`。
+6 个用例覆盖：每轮只收临时残留并保护脚本与 keep 名单、会话结束只搬静置 30 秒以上的脚本、
+git 跟踪的脚本不动、单条失败不影响其余条目、`maxEntries` 先筛候选再截断、`dryRun` 只记日志。
+`test\verify.mjs` 是更早的手工冒烟脚本，保留作参考。
 
 包内文件：
 
@@ -82,11 +84,13 @@ node "D:\AI\DeepSeek\_过程\04-脚本工具\dsh-workspace-tidy\test\verify.mjs"
 ```yaml
 - insert:
     - id: workspace-tidy
-      name: '@local/dsh-workspace-tidy'
+      name: dsh-workspace-tidy
       config:
         target: .dsh
         minAgeSeconds: 120
+        scriptMinAgeSeconds: 30
         scriptMinAgeHours: 12
+        skipGitTracked: true
         intervalMinutes: 10
         dryRun: false
 ```
@@ -100,9 +104,11 @@ node "D:\AI\DeepSeek\_过程\04-脚本工具\dsh-workspace-tidy\test\verify.mjs"
 | `scriptPatterns` | `.py/.ps1/.sh/.bat/.cmd` | 会话结束才收的脚本 glob |
 | `keep` | `AGENTS.md`、`README.md`、`清理DSH临时文件.ps1`、`修复-DSH插件更新.ps1` | 永不移动的文件名 |
 | `minAgeSeconds` | `120` | 文件至少静置多久才收 |
+| `scriptMinAgeSeconds` | `30` | 会话结束时脚本至少静置多久才收 |
 | `scriptMinAgeHours` | `12` | 启动扫描时脚本至少多旧才收 |
+| `skipGitTracked` | `true` | 跳过 git 跟踪的文件 |
 | `dryRun` | `false` | 只记录不移动 |
-| `maxEntries` | `500` | 每轮最多检查的根目录条目 |
+| `maxEntries` | `500` | 每轮最多处理的候选条目 |
 | `intervalMinutes` | `10` | 活跃会话的周期扫描间隔，0 关闭 |
 
 ## 回滚
@@ -111,7 +117,8 @@ node "D:\AI\DeepSeek\_过程\04-脚本工具\dsh-workspace-tidy\test\verify.mjs"
 
 ```json
 {"at":"2026-11-13T06:00:00.000Z","mode":"turn","root":"D:\\AI\\DeepSeek","dryRun":false,
- "moves":[{"from":"D:\\AI\\DeepSeek\\out.tmp","to":"D:\\AI\\DeepSeek\\.dsh\\tmp\\out.tmp"}]}
+ "moves":[{"from":"D:\\AI\\DeepSeek\\out.tmp","to":"D:\\AI\\DeepSeek\\.dsh\\tmp\\out.tmp"}],
+ "failed":[]}
 ```
 
 把所有 `to` 移回 `from` 即可恢复；某一行只想撤销一部分时按 `moves` 逐条处理。

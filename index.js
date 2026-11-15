@@ -16,8 +16,12 @@
  * Every move is appended to `<target>/tidy-log.jsonl` so nothing is lost.
  */
 
-import { appendFile, lstat, mkdir, readdir, rename, stat } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { appendFile, copyFile, lstat, mkdir, readdir, rename, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
+import { promisify } from 'node:util'
+
+const execFileAsync = promisify(execFile)
 
 export const name = 'workspace-tidy'
 
@@ -35,11 +39,15 @@ const DEFAULTS = {
   keep: ['AGENTS.md', 'README.md', '清理DSH临时文件.ps1', '修复-DSH插件更新.ps1'],
   /** A leftover younger than this may still be written; skip it. */
   minAgeSeconds: 120,
+  /** A script must be this old to move at session end (still being written). */
+  scriptMinAgeSeconds: 30,
   /** A script must be at least this old to move during a startup scan. */
   scriptMinAgeHours: 12,
+  /** Never move a file tracked by git in the workspace repository. */
+  skipGitTracked: true,
   /** Log moves without touching disk. */
   dryRun: false,
-  /** Upper bound of root entries inspected per pass. */
+  /** Upper bound of candidate entries inspected per pass. */
   maxEntries: 500,
   /** Periodic startup-style scan while a session is live; 0 disables. */
   intervalMinutes: 10,
@@ -48,6 +56,30 @@ const DEFAULTS = {
 const TURN = 'turn'
 const FULL = 'full'
 const STARTUP = 'startup'
+
+/** How long a `git ls-files` answer is reused. */
+const TRACKED_TTL_MS = 30_000
+
+/** root -> { at: number, files: Set<string> | null } */
+const trackedCache = new Map()
+
+async function trackedFiles(root) {
+  const cached = trackedCache.get(root)
+  if (cached !== undefined && Date.now() - cached.at < TRACKED_TTL_MS) return cached.files
+  let files = null
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', root, 'ls-files', '-z', '--cached'], {
+      maxBuffer: 32 * 1024 * 1024,
+      windowsHide: true,
+    })
+    files = new Set(stdout.split('\0').filter((path) => path.length > 0))
+  } catch {
+    // Not a git repository, git missing, or the command failed: no guard.
+    files = null
+  }
+  trackedCache.set(root, { at: Date.now(), files })
+  return files
+}
 
 function escapeRegExp(text) {
   return text.replace(/[.+^${}()|[\]\\]/g, '\\$&')
@@ -58,7 +90,7 @@ function globToRegExp(glob) {
 }
 
 function compile(globs) {
-  const patterns = (globs ?? []).map(globToRegExp)
+  const patterns = (Array.isArray(globs) ? globs : [globs]).filter((glob) => typeof glob === 'string').map(globToRegExp)
   return (value) => patterns.some((pattern) => pattern.test(value))
 }
 
@@ -68,7 +100,7 @@ function normalize(config) {
   merged.office = compile(merged.officeDirs)
   merged.cache = compile(merged.cacheDirs)
   merged.script = compile(merged.scriptPatterns)
-  merged.keepSet = new Set((merged.keep ?? []).map((entry) => entry.toLowerCase()))
+  merged.keepSet = new Set(merged.keep.map((entry) => String(entry).toLowerCase()))
   return merged
 }
 
@@ -94,7 +126,7 @@ function uniqueNames(filename) {
   return (index) => join(`${stem}-${index}${extension}`)
 }
 
-async function moveInto(from, toDirectory) {
+async function moveInto(from, toDirectory, renameFile = rename) {
   await mkdir(toDirectory, { recursive: true })
   const original = basename(from)
   const suffixed = uniqueNames(original)
@@ -102,7 +134,14 @@ async function moveInto(from, toDirectory) {
   for (let index = 2; index < 100 && (await lstatOrNone(to)) !== undefined; index += 1) {
     to = join(toDirectory, suffixed(index))
   }
-  await rename(from, to)
+  try {
+    await renameFile(from, to)
+  } catch (error) {
+    // rename() cannot cross volumes; fall back to copy + unlink.
+    if (error?.code !== 'EXDEV') throw error
+    await copyFile(from, to)
+    await unlink(from)
+  }
   return to
 }
 
@@ -128,6 +167,18 @@ function sessionDirectory(ctx, session) {
   }
 }
 
+function destinationFor(root, targetName, entry, options) {
+  if (entry.isDirectory()) {
+    return options.office(entry.name)
+      ? join(root, targetName, 'office')
+      : join(root, targetName, 'tmp', 'cache')
+  }
+  if (options.script(entry.name) && !options.junk(entry.name)) {
+    return join(root, targetName, 'tmp', 'scripts')
+  }
+  return join(root, targetName, 'tmp')
+}
+
 async function pass(ctx, session, mode, options) {
   const root = sessionDirectory(ctx, session)
   if (root === undefined) return
@@ -142,68 +193,94 @@ async function pass(ctx, session, mode, options) {
     return
   }
 
-  const targetName = options.target.replace(/[\\/]+$/, '')
-  const moves = []
-  for (const entry of entries.slice(0, options.maxEntries)) {
+  const targetName = String(options.target).replace(/[\\/]+$/, '')
+  const candidates = []
+  for (const entry of entries) {
     if (entry.name === targetName) continue
     if (entry.isSymbolicLink()) continue
-    const full = join(root, entry.name)
-    const info = await statOrNone(full)
-    if (info === undefined) continue
-
     if (entry.isDirectory()) {
-      if (options.office(entry.name) || options.cache(entry.name)) {
-        const destination = options.office(entry.name)
-          ? join(root, targetName, 'office')
-          : join(root, targetName, 'tmp', 'cache')
-        if (!options.dryRun) {
-          const to = await moveInto(full, destination)
-          moves.push({ from: full, to })
-        } else {
-          moves.push({ from: full, to: join(destination, entry.name) })
-        }
-      }
+      if (options.office(entry.name) || options.cache(entry.name)) candidates.push(entry)
       continue
     }
-
     if (!entry.isFile()) continue
     if (options.keepSet.has(entry.name.toLowerCase())) continue
-    const age = ageSeconds(info)
+    if (!options.junk(entry.name) && !options.script(entry.name)) continue
+    candidates.push(entry)
+  }
 
-    if (options.junk(entry.name) && age >= options.minAgeSeconds) {
-      const destination = join(root, targetName, 'tmp')
-      if (!options.dryRun) {
-        const to = await moveInto(full, destination)
-        moves.push({ from: full, to })
-      } else {
-        moves.push({ from: full, to: join(destination, entry.name) })
+  const limited = candidates.slice(0, options.maxEntries)
+  if (candidates.length > limited.length) {
+    ctx.logger.warn(
+      `workspace-tidy: ${candidates.length - limited.length} candidate(s) left for the next pass in ${root} (maxEntries ${options.maxEntries})`,
+    )
+  }
+
+  const tracked = options.skipGitTracked ? await trackedFiles(root) : null
+  const renameFile = typeof options.renameFile === 'function' ? options.renameFile : rename
+  const moves = []
+  const failed = []
+
+  for (const entry of limited) {
+    const full = join(root, entry.name)
+    try {
+      const info = await statOrNone(full)
+      if (info === undefined) continue
+
+      if (entry.isDirectory()) {
+        const destination = destinationFor(root, targetName, entry, options)
+        if (options.dryRun) {
+          moves.push({ from: full, to: join(destination, entry.name) })
+        } else {
+          moves.push({ from: full, to: await moveInto(full, destination, renameFile) })
+        }
+        continue
       }
-      continue
-    }
 
-    if (options.script(entry.name)) {
-      const oldEnoughForStartup = age >= options.scriptMinAgeHours * 3600
-      const wanted = mode === FULL || (mode === STARTUP && oldEnoughForStartup)
-      if (!wanted) continue
+      if (tracked !== null && tracked.has(entry.name)) continue
+      const age = ageSeconds(info)
+
+      if (options.junk(entry.name) && age >= options.minAgeSeconds) {
+        const destination = destinationFor(root, targetName, entry, options)
+        if (options.dryRun) {
+          moves.push({ from: full, to: join(destination, entry.name) })
+        } else {
+          moves.push({ from: full, to: await moveInto(full, destination, renameFile) })
+        }
+        continue
+      }
+
+      if (mode === TURN || !options.script(entry.name)) continue
+      const minimumAge = mode === FULL ? options.scriptMinAgeSeconds : options.scriptMinAgeHours * 3600
+      if (age < minimumAge) continue
       const destination = join(root, targetName, 'tmp', 'scripts')
-      if (!options.dryRun) {
-        const to = await moveInto(full, destination)
-        moves.push({ from: full, to })
-      } else {
+      if (options.dryRun) {
         moves.push({ from: full, to: join(destination, entry.name) })
+      } else {
+        moves.push({ from: full, to: await moveInto(full, destination, renameFile) })
       }
+    } catch (error) {
+      // One unreadable/locked entry must not abort the whole pass.
+      failed.push({ name: entry.name, error: String(error) })
     }
   }
 
-  if (moves.length === 0) return
+  if (moves.length === 0 && failed.length === 0) return
   await appendLog(root, targetName, {
     at: new Date().toISOString(),
     mode,
     root,
     dryRun: options.dryRun === true,
-    moves: moves.map(({ from, to }) => ({ from, to })),
+    moves,
+    failed,
   })
-  ctx.logger.info(`workspace-tidy: ${mode} pass moved ${moves.length} item(s) in ${root}${options.dryRun ? ' (dry run)' : ''}`)
+  if (moves.length > 0) {
+    ctx.logger.info(
+      `workspace-tidy: ${mode} pass moved ${moves.length} item(s) in ${root}${options.dryRun ? ' (dry run)' : ''}`,
+    )
+  }
+  if (failed.length > 0) {
+    ctx.logger.warn(`workspace-tidy: ${mode} pass failed to move ${failed.length} item(s) in ${root}`)
+  }
 }
 
 export function apply(ctx, config) {

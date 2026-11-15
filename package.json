@@ -1,6 +1,6 @@
 {
   "name": "dsh-workspace-tidy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keep a DSH workspace tidy: move generated scripts, temp files and render leftovers into a hidden .dsh folder.",
   "license": "MIT",
   "author": "dengwei84",
@@ -19,6 +19,9 @@
     "tidy",
     "cleanup"
   ],
+  "engines": {
+    "dsh": ">=0.2.2-0 <0.3.0-0"
+  },
   "type": "module",
   "exports": {
     ".": "./index.js",
@@ -32,6 +35,9 @@
     "icon.svg",
     "README.md"
   ],
+  "scripts": {
+    "test": "node --test test/tidy.test.mjs"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
