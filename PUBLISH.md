@@ -5,7 +5,7 @@
 **没有「上传安装包」的入口**——收录 = 向该仓库提一个 PR，合并后自动出现在市场的「发现/搜索」里。
 市场界面右上角的「申请收录插件 ↗」就是这份 contributing.md。
 
-## 状态：已上架（2026-11-15）
+## 状态：已上架，市场已可见（2026-11-18 复核）
 
 | 项 | 值 |
 |---|---|
@@ -23,15 +23,15 @@
 - **改展示信息**（描述/分类/图标）：再向 awesome-dsh-plugin 提一次 PR 修改对应 YAML，合并后生效；若要市场优先用 npm，可在 YAML 里补 `npm: dsh-workspace-tidy`。
 - **本机更新**：`pnpm dsh plugin --profile desktop add dsh-workspace-tidy`（npm 版）或 `github:dengwei84/dsh-workspace-tidy`（跟随 main）。
 
-### 市场可见性依赖上游每夜构建（2026-11-16 记录）
+### 市场可见性依赖上游每夜构建（2026-11-16 故障 → 2026-11-18 已恢复）
 
 目录条目合并后会立刻出现在 `https://awesome-dsh-plugin.com/plugins.json`；但 dshmarket 在中国区**先读 npm 目录包 `dsh-plugin-catalog`**（origin 只作兜底），而这个包由每夜构建发布（`cron: '23 2 * * *'` UTC，只有 schedule / workflow_dispatch 会跑全量 probe 并发布）。
 
 2026-11-15、11-16 两次每夜构建都因上游一个重复 npm 名失败：`MarketIndexError: $.plugins[...].name duplicates dsh-dot-mcp`（`Tests4gptplay/dsh-dots` 与其子目录 `packages/dsh-dot-mcp` 都发布 `dsh-dot-mcp`），构建在「校验索引」阶段退出，后续 deploy 与 publish catalog 全部跳过，目录包停在 `2026.1114.20961`（2026-11-14T05:27:04Z）。于是所有在 11-14 之后合并的条目（包括本插件）暂时都搜不到。
 
-- 修复：[PR #15579](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15579)（open、mergeable，Fixes [#15569](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/issues/15569)）——让重复名只丢那一行、不再拖垮整个构建。
-- 预期：维护者合并 + 下一次每夜构建成功后，npm-map 会通过全量 probe 纳入本插件（npm 包的 `repository` 已指回仓库），索引与 npm 目录自动重建，市场重新打开即可搜到；本机不需要任何改动。
-- 临时绕过（通常不必）：设用户环境变量 `DSHM_REGISTRY_URL=https://awesome-dsh-plugin.com/plugins.json` 并重启 DSH，市场会直接读线上目录（含本插件）；代价是整体替换中国区源、失去 npm 兜底，上游恢复后应删掉该变量。
+- 修复：[PR #15579](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/15579)（Fixes [#15569](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/issues/15569)）于 2026-11-16T16:39:48Z 合入，让重复名只丢那一行、不再拖垮整个构建。
+- 恢复：2026-11-17 每夜构建成功，目录包更新为 `2026.1117.22685`（11-17T06:09Z）。核对结果：`plugins.json` 11,519 条中已有 `dsh-workspace-tidy`（`npm: "dsh-workspace-tidy"`、`version: "0.1.1"`、install 变为 `dsh plugin --profile web add dsh-workspace-tidy`）；format-1 索引 5,959 条也已收录（versions[0].source.type = npm）；详情页 200 且带 npm 安装命令。
+- 临时绕过（当时未用，仅留档）：设用户环境变量 `DSHM_REGISTRY_URL=https://awesome-dsh-plugin.com/plugins.json` 并重启 DSH，可绕过 npm 目录直接读线上目录；代价是整体替换中国区源、失去 npm 兜底。
 
 ### npm 首次发布的两个坑
 
